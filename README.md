@@ -1,89 +1,69 @@
 ﻿# OpenClip
 
-Self-hosted, open-source AI video repurposing platform — long-form video → Shorts.
+Self-hosted, open-source AI video repurposing — long-form → Shorts.
 
-Independent implementation. Not affiliated with Opus Clip.
+Independent project. Not affiliated with Opus Clip.
 
 ## Status
 
-**Phase 0 + Phase 1 complete** — backend foundation only (no video AI yet).
+**Phases 0–9 implemented.** End-to-end pipeline verified with a playable **1080×1920** MP4.
 
-| Phase | Status |
-|-------|--------|
-| 0 Architecture / repo bootstrap | Done |
-| 1 Backend foundation | Done |
-| 2 Media Agent | Pending |
-| 3 Transcript Agent | Pending |
-| 4–9 Clipping, ranking, edit, render, UI, E2E | Pending |
+## Hardware
 
-## Hardware requirements
-
-Designed for:
-
-- NVIDIA GPU with **8 GB VRAM**
-- **16 GB** system RAM
-
-GPU rule: only **one** heavyweight model (Whisper / Qwen / pyannote) on the GPU at a time.
+Designed for **8 GB VRAM / 16 GB RAM**. Only one heavyweight model on GPU at a time (`MAX_CONCURRENT_GPU_JOBS=1`).
 
 ## Stack
 
-- Frontend (Phase 8): React + TypeScript + Vite + Tailwind
-- Backend: FastAPI + Pydantic + SQLAlchemy + PostgreSQL
-- Jobs: Celery + Redis
-- Local LLM: Ollama (Qwen3-4B)
-- Video: FFmpeg / FFprobe
+- React + TypeScript + Vite + Tailwind
+- FastAPI + SQLAlchemy + PostgreSQL + Redis + Celery
+- faster-whisper (WhisperX/pyannote optional), Ollama Qwen ranking, OpenCV crop, FFmpeg render
 
 No paid AI APIs required for the core path.
 
-## Quick start (Phase 1)
+## Quick start
 
 ```bash
-# Infra
 cp .env.example .env
 docker compose up -d postgres redis
 
-# Backend
 cd backend
 uv sync
 uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --port 8000
 
-# Worker (separate terminal)
-cd backend
-uv run celery -A app.workers.celery_app.celery_app worker --loglevel=INFO --concurrency=1
+# other terminal
+uv run celery -A app.workers.celery_app.celery_app worker --loglevel=INFO --concurrency=1 --pool=solo
+
+# frontend
+cd frontend
+npm install
+npm run dev
 ```
 
-Health: `GET http://localhost:8000/health`  
-System: `GET http://localhost:8000/api/system/status`
-
-## Model installation
-
-See [docs/MODELS.md](docs/MODELS.md) and [docs/GPU_SETUP.md](docs/GPU_SETUP.md).  
-Do not download large models until Phase 3+.
-
-## Environment checks
+Optional Ollama ranking:
 
 ```bash
-python scripts/check_environment.py
-python scripts/check_gpu.py
-python scripts/check_ffmpeg.py
+ollama pull qwen3:4b
 ```
 
-## Documentation
+Whisper: set `WHISPER_MODEL=tiny` for quick tests, `large-v3` for quality (needs more VRAM/time).
 
-- [Architecture](docs/ARCHITECTURE.md)
-- [Agents](docs/AGENTS.md)
-- [Pipeline](docs/PIPELINE.md)
-- [Models & licenses](docs/MODELS.md)
-- [GPU setup](docs/GPU_SETUP.md)
-- [Development](docs/DEVELOPMENT.md)
-- [API](docs/API.md)
-- [Database](docs/DATABASE.md)
-- [Troubleshooting](docs/TROUBLESHOOTING.md)
-- [Licenses](docs/LICENSES.md)
+## First Short (E2E)
 
-## Limitations (current)
+```bash
+# generates synthetic speech sample + runs full pipeline
+uv run --project backend python scripts/e2e_pipeline.py
+```
 
-- No media upload / transcription / clip generation yet
-- Frontend deferred to Phase 8
-- Ollama / Whisper / pyannote not required until later phases
+Or via UI: create project → upload → Process → Shorts → download.
+
+## Docs
+
+See `docs/` for architecture, models/licenses, GPU setup, API, troubleshooting.
+
+## Limitations
+
+- OpenCV 5 on some installs lacks Haar cascades → center-crop fallback
+- pyannote / WhisperX are optional (HF token / extra deps)
+- Qwen ranking falls back to deterministic scores if Ollama is down
+- NVIDIA driver must be healthy for GPU acceleration

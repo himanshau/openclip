@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import health_router
+from app.api import api_router, health_router
 from app.core.config import get_settings
 from app.core.logging import get_logger, setup_logging
 
@@ -18,6 +18,9 @@ async def lifespan(_app: FastAPI):
     settings = get_settings()
     setup_logging(settings.debug)
     settings.storage_root.mkdir(parents=True, exist_ok=True)
+    from app.services.storage import get_storage
+
+    get_storage()
     logger.info("openclip_startup project=%s env=%s", settings.project_name, settings.app_env)
     yield
     logger.info("openclip_shutdown")
@@ -27,7 +30,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
         title=settings.project_name,
-        version="0.1.0",
+        version="0.2.0",
         lifespan=lifespan,
     )
     app.add_middleware(
@@ -38,6 +41,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(health_router)
+    app.include_router(api_router)
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(_request: Request, exc: Exception):

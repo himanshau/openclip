@@ -19,6 +19,14 @@ dependencies = [
   "psutil>=6.1.0",
   "python-multipart>=0.0.17",
   "python-dotenv>=1.2.2",
+  "faster-whisper>=1.2.1",
+  "opencv-python-headless>=4.8",
+  "numpy>=1.26",
+  "scenedetect[opencv]>=0.6",
+  "librosa>=0.10",
+  "soundfile>=0.12",
+  "aiofiles>=24.1",
+  "python-magic-bin>=0.4.14 ; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]
