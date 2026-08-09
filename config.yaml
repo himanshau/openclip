@@ -17,6 +17,27 @@ ranking:
     quotability: 0.05
     duration_suitability: 0.05
 
+# Short-form Potential / virality engine (does NOT guarantee views)
+virality:
+  ranker: rule_based  # or lightgbm (falls back until trained)
+  ranking_version: virality_v1
+  min_short_form_score: 55
+  cheap_filter_score: 35
+  max_final_clips: 5
+  enable_llm_semantic: true
+  enable_context_expansion: true
+  weights:
+    hook: 0.18
+    curiosity: 0.10
+    emotion: 0.10
+    information: 0.08
+    narrative: 0.12
+    payoff: 0.12
+    shareability: 0.08
+    self_contained: 0.08
+    visual: 0.07
+    audio: 0.07
+
 captions:
   default_preset: bold
   max_words_per_line: 6

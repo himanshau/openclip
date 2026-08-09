@@ -13,7 +13,6 @@ from app.core.logging import get_logger, log_extra
 from app.db.session import SessionLocal
 from app.models import Candidate, Clip, JobStatus, JobType, ProcessingJob, Video
 from app.services.job_service import update_job_progress
-from app.services.ranking import get_ranking_service
 from app.workers.celery_app import celery_app
 
 logger = get_logger(__name__)
@@ -84,51 +83,126 @@ def discover_clips(self, video_id: str, job_id: str) -> dict:
 
 @celery_app.task(name="openclip.rank_candidates", bind=True)
 def rank_candidates(self, video_id: str, job_id: str) -> dict:
+    from app.services.ranker import get_virality_engine
+    from uuid import uuid4
+
     db = SessionLocal()
     try:
-        update_job_progress(db, UUID(job_id), status=JobStatus.RUNNING, progress=10, current_step="llm_ranking")
-        ranking = get_ranking_service()
+        update_job_progress(
+            db, UUID(job_id), status=JobStatus.RUNNING, progress=10, current_step="virality_ranking"
+        )
+        engine = get_virality_engine()
         candidates = db.query(Candidate).filter(Candidate.video_id == UUID(video_id)).all()
-        scored = []
-        for i, cand in enumerate(candidates):
-            final, payload, source = ranking.score_candidate_llm(
-                cand.text, float(cand.deterministic_score or 0)
-            )
-            cand.llm_score = {**payload, "source": source}
-            cand.final_score = final
-            scored.append(
+        raw = [
+            {
+                "id": str(c.id),
+                "start": c.start,
+                "end": c.end,
+                "text": c.text,
+                "features": c.features or {},
+                "deterministic_score": c.deterministic_score,
+                "final_score": c.final_score,
+            }
+            for c in candidates
+        ]
+        survivors = engine.run(raw)
+        keep_payload = {s.id: s for s in survivors if s.id}
+
+        # Delete weak / non-selected candidates
+        kept_ids = set(keep_payload.keys())
+        for cand in candidates:
+            sid = str(cand.id)
+            if sid not in kept_ids:
+                db.delete(cand)
+                continue
+            result = keep_payload[sid]
+            # If context expansion changed bounds, update
+            cand.start = result.start
+            cand.end = result.end
+            cand.text = result.text
+            cand.final_score = result.final_score
+            cand.llm_score = {
+                "short_form_potential_score": result.final_score,
+                "feature_scores": result.feature_scores,
+                "penalties": result.penalties,
+                "selection_reasons": result.selection_reasons,
+                "ranking_version": result.ranking_version,
+                "ranking_weights": result.ranking_weights,
+                "source": result.source,
+                "llm_semantic": (result.features or {}).get("llm_semantic"),
+            }
+            feats = dict(cand.features or {})
+            feats.update(
                 {
-                    "id": str(cand.id),
-                    "start": cand.start,
-                    "end": cand.end,
-                    "text": cand.text,
-                    "final_score": final,
+                    "selection_reasons": result.selection_reasons,
+                    "feature_scores": result.feature_scores,
+                    "penalties": result.penalties,
+                    "ranking_version": result.ranking_version,
                 }
             )
-            update_job_progress(
-                db,
-                UUID(job_id),
-                progress=10 + int(70 * (i + 1) / max(1, len(candidates))),
-                current_step=f"ranking_{i+1}",
+            cand.features = feats
+
+        # Survivors without matching id (pure expansions) → insert new Candidate rows
+        for result in survivors:
+            if result.id and result.id in {str(c.id) for c in candidates}:
+                continue
+            new_id = uuid4()
+            db.add(
+                Candidate(
+                    id=new_id,
+                    video_id=UUID(video_id),
+                    start=result.start,
+                    end=result.end,
+                    text=result.text,
+                    features={
+                        **(result.features or {}),
+                        "selection_reasons": result.selection_reasons,
+                        "feature_scores": result.feature_scores,
+                        "penalties": result.penalties,
+                        "ranking_version": result.ranking_version,
+                    },
+                    deterministic_score=result.final_score,
+                    llm_score={
+                        "short_form_potential_score": result.final_score,
+                        "feature_scores": result.feature_scores,
+                        "penalties": result.penalties,
+                        "selection_reasons": result.selection_reasons,
+                        "ranking_version": result.ranking_version,
+                        "source": result.source,
+                    },
+                    final_score=result.final_score,
+                )
             )
-        kept = ranking.deduplicate(scored)
-        keep_ids = {k["id"] for k in kept}
-        for cand in candidates:
-            if str(cand.id) not in keep_ids:
-                db.delete(cand)
-        remaining = [c for c in candidates if str(c.id) in keep_ids]
-        remaining.sort(key=lambda c: float(c.final_score or 0), reverse=True)
+            result.id = str(new_id)
+
+        remaining = (
+            db.query(Candidate)
+            .filter(Candidate.video_id == UUID(video_id))
+            .order_by(Candidate.final_score.desc().nullslast())
+            .all()
+        )
         for rank, cand in enumerate(remaining, start=1):
             cand.rank = rank
         db.commit()
-        update_job_progress(db, UUID(job_id), status=JobStatus.COMPLETED, progress=100, current_step="ranked")
-        return {"ok": True, "kept": len(remaining)}
+        update_job_progress(
+            db,
+            UUID(job_id),
+            status=JobStatus.COMPLETED,
+            progress=100,
+            current_step="virality_ranked",
+            metadata_update={
+                "input_candidates": len(raw),
+                "kept": len(remaining),
+                "min_short_form_score": engine.min_score,
+            },
+        )
+        return {"ok": True, "input": len(raw), "kept": len(remaining)}
     except Exception as exc:
         update_job_progress(
             db,
             UUID(job_id),
             status=JobStatus.FAILED,
-            error={"error_code": "ranking_failed", "message": str(exc), "stage": "ranking"},
+            error={"error_code": "ranking_failed", "message": str(exc), "stage": "virality"},
         )
         raise
     finally:

@@ -253,3 +253,31 @@ class Clip(Base):
 
     video: Mapped[Video] = relationship(back_populates="clips")
     candidate: Mapped[Candidate | None] = relationship(back_populates="clips")
+    performance: Mapped[ClipPerformance | None] = relationship(back_populates="clip", uselist=False)
+
+
+class ClipPerformance(Base):
+    """Post-publication analytics for future learning-to-rank labels."""
+
+    __tablename__ = "clip_performances"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    clip_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("clips.id"), unique=True, nullable=False
+    )
+    platform: Mapped[str | None] = mapped_column(String(64))
+    publish_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    views: Mapped[int | None] = mapped_column(Integer)
+    likes: Mapped[int | None] = mapped_column(Integer)
+    comments: Mapped[int | None] = mapped_column(Integer)
+    shares: Mapped[int | None] = mapped_column(Integer)
+    average_view_duration: Mapped[float | None] = mapped_column(Float)
+    average_percentage_viewed: Mapped[float | None] = mapped_column(Float)
+    viewed_vs_swiped_away: Mapped[float | None] = mapped_column(Float)
+    extra: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    clip: Mapped[Clip] = relationship(back_populates="performance")

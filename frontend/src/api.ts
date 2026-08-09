@@ -34,10 +34,12 @@ export type Clip = {
   start: number;
   end: number;
   score?: number;
-  score_breakdown?: Record<string, number>;
+  score_breakdown?: Record<string, unknown>;
   status: string;
   render_path?: string;
   edit_plan?: Record<string, unknown>;
+  selection_reasons?: string[];
+  short_form_potential_score?: number;
 };
 export type Transcript = {
   id: string;

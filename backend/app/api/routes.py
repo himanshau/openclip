@@ -4,6 +4,7 @@ import uuid
 from pathlib import Path
 from uuid import UUID
 
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
@@ -267,17 +268,41 @@ def generate_clips(video_id: UUID, db: Session = Depends(get_db)):
 
 @router.get("/videos/{video_id}/clips", response_model=list[ClipRead])
 def list_clips(video_id: UUID, db: Session = Depends(get_db)):
-    return db.query(Clip).filter(Clip.video_id == video_id).order_by(Clip.score.desc().nullslast()).all()
+    clips = db.query(Clip).filter(Clip.video_id == video_id).order_by(Clip.score.desc().nullslast()).all()
+    out: list[ClipRead] = []
+    for c in clips:
+        reasons = None
+        if isinstance(c.score_breakdown, dict):
+            reasons = c.score_breakdown.get("selection_reasons")
+        out.append(
+            ClipRead(
+                id=c.id,
+                video_id=c.video_id,
+                title=c.title,
+                start=c.start,
+                end=c.end,
+                score=c.score,
+                score_breakdown=c.score_breakdown,
+                edit_plan=c.edit_plan,
+                render_path=c.render_path,
+                thumbnail_path=c.thumbnail_path,
+                status=c.status,
+                selection_reasons=reasons,
+                short_form_potential_score=c.score,
+            )
+        )
+    return out
 
 
 @router.get("/videos/{video_id}/candidates", response_model=list[CandidateRead])
 def list_candidates(video_id: UUID, db: Session = Depends(get_db)):
-    return (
+    rows = (
         db.query(Candidate)
         .filter(Candidate.video_id == video_id)
         .order_by(Candidate.final_score.desc().nullslast())
         .all()
     )
+    return [CandidateRead.from_orm_candidate(c) for c in rows]
 
 
 @router.get("/clips/{clip_id}", response_model=ClipRead)
@@ -285,7 +310,55 @@ def get_clip(clip_id: UUID, db: Session = Depends(get_db)):
     clip = db.get(Clip, clip_id)
     if not clip:
         raise HTTPException(404, "Clip not found")
-    return clip
+    reasons = None
+    if isinstance(clip.score_breakdown, dict):
+        reasons = clip.score_breakdown.get("selection_reasons")
+    return ClipRead(
+        id=clip.id,
+        video_id=clip.video_id,
+        title=clip.title,
+        start=clip.start,
+        end=clip.end,
+        score=clip.score,
+        score_breakdown=clip.score_breakdown,
+        edit_plan=clip.edit_plan,
+        render_path=clip.render_path,
+        thumbnail_path=clip.thumbnail_path,
+        status=clip.status,
+        selection_reasons=reasons,
+        short_form_potential_score=clip.score,
+    )
+
+
+class ClipPerformanceIn(BaseModel):
+    platform: str | None = None
+    views: int | None = None
+    likes: int | None = None
+    comments: int | None = None
+    shares: int | None = None
+    average_view_duration: float | None = None
+    average_percentage_viewed: float | None = None
+    viewed_vs_swiped_away: float | None = None
+
+
+@router.post("/clips/{clip_id}/performance")
+def upsert_clip_performance(clip_id: UUID, body: ClipPerformanceIn, db: Session = Depends(get_db)):
+    from datetime import datetime, timezone
+
+    from app.models import ClipPerformance
+
+    clip = db.get(Clip, clip_id)
+    if not clip:
+        raise HTTPException(404, "Clip not found")
+    row = db.query(ClipPerformance).filter(ClipPerformance.clip_id == clip_id).one_or_none()
+    if row is None:
+        row = ClipPerformance(id=uuid.uuid4(), clip_id=clip_id)
+        db.add(row)
+    for k, v in body.model_dump(exclude_unset=True).items():
+        setattr(row, k, v)
+    row.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"ok": True, "clip_id": str(clip_id)}
 
 
 @router.post("/clips/{clip_id}/render", response_model=JobRead)

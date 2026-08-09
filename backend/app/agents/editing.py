@@ -7,8 +7,9 @@ import cv2
 import numpy as np
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.models import Clip, JobStatus, Transcript, TranscriptSegment, TranscriptWord, Video
+from app.models import Candidate, Clip, JobStatus, Transcript, TranscriptSegment, TranscriptWord, Video
 from app.services.captions import get_caption_service
 from app.services.job_service import update_job_progress
 from app.services.storage import get_storage
@@ -29,18 +30,29 @@ class EditingAgent:
         caption_preset: str = "bold",
         smart_cut: bool = True,
     ) -> list[Clip]:
-        from app.models import Candidate
-
         video = db.get(Video, video_id)
         if video is None:
             raise ValueError("video missing")
+        settings = get_settings()
+        min_score = float((settings.yaml_config.get("virality") or {}).get("min_short_form_score", 55))
         candidates = (
             db.query(Candidate)
             .filter(Candidate.video_id == video_id)
+            .filter(Candidate.final_score.isnot(None))
+            .filter(Candidate.final_score >= min_score)
             .order_by(Candidate.final_score.desc().nullslast())
             .limit(top_n)
             .all()
         )
+        # If virality gate left none (edge case), take top ranked anyway but still prefer score order
+        if not candidates:
+            candidates = (
+                db.query(Candidate)
+                .filter(Candidate.video_id == video_id)
+                .order_by(Candidate.final_score.desc().nullslast())
+                .limit(min(2, top_n))
+                .all()
+            )
         update_job_progress(db, job_id, status=JobStatus.RUNNING, progress=10, current_step="edit_plans")
 
         # clear previous planned clips without renders? keep simple: delete planned
@@ -82,6 +94,16 @@ class EditingAgent:
                 "zoom_events": [],
                 "speaker": None,
             }
+            reasons = []
+            if isinstance(cand.llm_score, dict):
+                reasons = cand.llm_score.get("selection_reasons") or []
+            if not reasons and isinstance(cand.features, dict):
+                reasons = cand.features.get("selection_reasons") or []
+            breakdown = dict(cand.llm_score or {})
+            if not breakdown and isinstance(cand.features, dict):
+                breakdown = dict(cand.features.get("feature_scores") or cand.features.get("breakdown") or {})
+            breakdown["selection_reasons"] = reasons
+            breakdown["short_form_potential_score"] = cand.final_score
             clip = Clip(
                 id=uuid4(),
                 video_id=video_id,
@@ -90,7 +112,7 @@ class EditingAgent:
                 start=cand.start,
                 end=cand.end,
                 score=cand.final_score,
-                score_breakdown=cand.llm_score or (cand.features or {}).get("breakdown"),
+                score_breakdown=breakdown,
                 edit_plan=plan,
                 status="planned",
             )

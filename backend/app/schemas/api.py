@@ -89,8 +89,32 @@ class CandidateRead(BaseModel):
     final_score: float | None = None
     rank: int | None = None
     llm_score: dict[str, Any] | None = None
+    features: dict[str, Any] | None = None
+    selection_reasons: list[str] | None = None
+    short_form_potential_score: float | None = None
 
     model_config = {"from_attributes": True}
+
+    @classmethod
+    def from_orm_candidate(cls, cand: Any) -> "CandidateRead":
+        reasons = None
+        if cand.llm_score and isinstance(cand.llm_score, dict):
+            reasons = cand.llm_score.get("selection_reasons")
+        if not reasons and cand.features:
+            reasons = (cand.features or {}).get("selection_reasons")
+        return cls(
+            id=cand.id,
+            start=cand.start,
+            end=cand.end,
+            text=cand.text,
+            deterministic_score=cand.deterministic_score,
+            final_score=cand.final_score,
+            rank=cand.rank,
+            llm_score=cand.llm_score,
+            features=cand.features,
+            selection_reasons=reasons,
+            short_form_potential_score=cand.final_score,
+        )
 
 
 class ClipRead(BaseModel):
@@ -105,6 +129,8 @@ class ClipRead(BaseModel):
     render_path: str | None = None
     thumbnail_path: str | None = None
     status: str
+    selection_reasons: list[str] | None = None
+    short_form_potential_score: float | None = None
 
     model_config = {"from_attributes": True}
 

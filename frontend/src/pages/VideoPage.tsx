@@ -124,12 +124,25 @@ export default function VideoPage() {
             <article key={c.id} className="rounded-xl border border-sea/10 bg-white/90 p-4">
               <h3 className="font-semibold">{c.title || c.id}</h3>
               <p className="text-sm text-sea/70">
-                {c.start.toFixed(1)}s → {c.end.toFixed(1)}s · score {c.score?.toFixed?.(1) ?? "—"} · {c.status}
+                {c.start.toFixed(1)}s → {c.end.toFixed(1)}s · Short-form Potential{" "}
+                {(c.short_form_potential_score ?? c.score)?.toFixed?.(1) ?? "—"} · {c.status}
               </p>
-              {c.score_breakdown && (
+              {typeof (c.score_breakdown as any)?.feature_scores === "object" && (
                 <p className="mt-1 text-xs text-sea/60">
-                  hook {c.score_breakdown.hook ?? "—"} · emotion {c.score_breakdown.emotion ?? c.score_breakdown.emotional_impact ?? "—"} · curiosity {c.score_breakdown.curiosity ?? "—"}
+                  hook {String((c.score_breakdown as any).feature_scores.hook ?? "—")} · emotion{" "}
+                  {String((c.score_breakdown as any).feature_scores.emotion ?? "—")} · curiosity{" "}
+                  {String((c.score_breakdown as any).feature_scores.curiosity ?? "—")} · payoff{" "}
+                  {String((c.score_breakdown as any).feature_scores.payoff ?? "—")}
                 </p>
+              )}
+              {(c.selection_reasons?.length || (c.score_breakdown as any)?.selection_reasons) && (
+                <ul className="mt-2 list-disc pl-5 text-xs text-sea/80">
+                  {(c.selection_reasons || (c.score_breakdown as any).selection_reasons || []).map(
+                    (r: string, i: number) => (
+                      <li key={i}>{r}</li>
+                    )
+                  )}
+                </ul>
               )}
               <div className="mt-3 flex gap-3 text-sm font-semibold">
                 {c.render_path ? (
