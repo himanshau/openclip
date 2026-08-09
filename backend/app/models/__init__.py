@@ -58,7 +58,7 @@ class User(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
-    display_name: Mapped[Optional[str]] = mapped_column(String(255))
+    display_name: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     projects: Mapped[list[Project]] = relationship(back_populates="owner")
@@ -69,14 +69,14 @@ class Project(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text)
-    owner_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    description: Mapped[str | None] = mapped_column(Text)
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    owner: Mapped[Optional[User]] = relationship(back_populates="projects")
+    owner: Mapped[User | None] = relationship(back_populates="projects")
     videos: Mapped[list[Video]] = relationship(back_populates="project")
     jobs: Mapped[list[ProcessingJob]] = relationship(back_populates="project")
 
@@ -89,17 +89,17 @@ class Video(Base):
         UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False
     )
     filename: Mapped[str] = mapped_column(String(512), nullable=False)
-    original_path: Mapped[Optional[str]] = mapped_column(String(1024))
-    proxy_path: Mapped[Optional[str]] = mapped_column(String(1024))
-    audio_path: Mapped[Optional[str]] = mapped_column(String(1024))
-    thumbnail_path: Mapped[Optional[str]] = mapped_column(String(1024))
-    sha256: Mapped[Optional[str]] = mapped_column(String(64), index=True)
-    duration: Mapped[Optional[float]] = mapped_column(Float)
-    width: Mapped[Optional[int]] = mapped_column(Integer)
-    height: Mapped[Optional[int]] = mapped_column(Integer)
-    fps: Mapped[Optional[float]] = mapped_column(Float)
-    codec: Mapped[Optional[str]] = mapped_column(String(64))
-    audio_codec: Mapped[Optional[str]] = mapped_column(String(64))
+    original_path: Mapped[str | None] = mapped_column(String(1024))
+    proxy_path: Mapped[str | None] = mapped_column(String(1024))
+    audio_path: Mapped[str | None] = mapped_column(String(1024))
+    thumbnail_path: Mapped[str | None] = mapped_column(String(1024))
+    sha256: Mapped[str | None] = mapped_column(String(64), index=True)
+    duration: Mapped[float | None] = mapped_column(Float)
+    width: Mapped[int | None] = mapped_column(Integer)
+    height: Mapped[int | None] = mapped_column(Integer)
+    fps: Mapped[float | None] = mapped_column(Float)
+    codec: Mapped[str | None] = mapped_column(String(64))
+    audio_codec: Mapped[str | None] = mapped_column(String(64))
     status: Mapped[VideoStatus] = mapped_column(
         Enum(VideoStatus, name="video_status"),
         default=VideoStatus.UPLOADED,
@@ -122,17 +122,17 @@ class ProcessingJob(Base):
         nullable=False,
     )
     progress: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    current_step: Mapped[Optional[str]] = mapped_column(String(255))
-    project_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+    current_step: Mapped[str | None] = mapped_column(String(255))
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("projects.id")
     )
-    video_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("videos.id"))
-    error: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB)
-    job_metadata: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB)
-    celery_task_id: Mapped[Optional[str]] = mapped_column(String(255))
+    video_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("videos.id"))
+    error: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    job_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    celery_task_id: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    project: Mapped[Optional[Project]] = relationship(back_populates="jobs")
-    video: Mapped[Optional[Video]] = relationship(back_populates="jobs")
+    project: Mapped[Project | None] = relationship(back_populates="jobs")
+    video: Mapped[Video | None] = relationship(back_populates="jobs")
