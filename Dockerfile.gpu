@@ -1,0 +1,30 @@
+# GPU image for NVIDIA hosts (8 GB VRAM class). Use with docker-compose GPU notes.
+FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3.11-venv \
+    python3-pip \
+    ffmpeg \
+    curl \
+    build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /app/backend
+COPY backend/pyproject.toml backend/README.md ./
+RUN uv pip install --system -e .
+
+COPY backend /app/backend
+COPY config.yaml /app/config.yaml
+
+ENV GPU_ENABLED=true \
+    MAX_CONCURRENT_GPU_JOBS=1
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

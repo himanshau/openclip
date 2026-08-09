@@ -1,0 +1,48 @@
+# OpenClip typed runtime defaults (merged with env / Settings)
+
+candidate:
+  min_duration: 20
+  max_duration: 60
+  target_durations: [15, 20, 30, 45, 60, 75, 90]
+
+ranking:
+  weights:
+    hook: 0.25
+    curiosity: 0.15
+    emotional_impact: 0.15
+    information_density: 0.10
+    self_contained: 0.10
+    visual_interest: 0.10
+    audio_energy: 0.05
+    quotability: 0.05
+    duration_suitability: 0.05
+
+captions:
+  default_preset: bold
+  max_words_per_line: 6
+  max_chars_per_line: 32
+
+render:
+  width: 1080
+  height: 1920
+  fps: 30
+  video_codec: libx264
+  audio_codec: aac
+  prefer_nvenc: true
+
+gpu:
+  max_concurrent_jobs: 1
+  clear_cache_on_unload: true
+
+models:
+  llm: qwen3:4b
+  whisper: large-v3
+  vision_llm: qwen3-vl:4b  # optional; not required for MVP
+
+workers:
+  concurrency: 1
+  task_soft_time_limit: 3600
+  task_time_limit: 7200
+
+storage:
+  root: ./storage
