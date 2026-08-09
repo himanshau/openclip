@@ -37,8 +37,8 @@ storage/thumbnails/**
 storage/cache/**
 !storage/**/.gitkeep
 
-# Models / ML caches
-models/
+# Models / ML caches (weights only — not Python packages)
+/models/
 .cache/
 *.pt
 *.bin
